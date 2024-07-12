@@ -109,7 +109,8 @@ def train_CIFAR10(
 
                     # Clean CUDA Memory
                     del inputs, outputs, labels
-                    torch.cuda.empty_cache()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
                     # Perform test and log results
 
                     test_acc = best_acc
@@ -186,9 +187,9 @@ def main(config):
     if (config.device ==
             "cuda" and torch.cuda.is_available()):
         config.update({"device": "cuda:0"}, allow_val_change=True)
+        torch.cuda.set_per_process_memory_fraction(0.5, 0)
     else:
         config.update({"device": "cpu"}, allow_val_change=True)
-    torch.cuda.set_per_process_memory_fraction(0.5, 0)
     from CIFAR10.models import get_model
     model = get_model(config)
 
