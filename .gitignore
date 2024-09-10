@@ -1,0 +1,5 @@
+build/
+img/
+data/
+__pycache__
+*.egg-info
