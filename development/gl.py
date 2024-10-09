@@ -23,7 +23,6 @@ class gl(nn.Module):
         Returns:
             torch.tensor: (...,n,n)
         """
-        N, C, m, m = X.shape
     
         return X
 
