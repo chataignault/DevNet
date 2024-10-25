@@ -1,11 +1,13 @@
 """
 Adapted from https://github.com/Lezcano/geotorch/blob/master/geotorch/so.py
 """
+
 import torch
 from torch import nn
+from .param import param
 
 
-class so(nn.Module):
+class so(param):
     def __init__(self, size):
         """
         so(n) lie algebra matrices, parametrized in terms of
@@ -13,16 +15,15 @@ class so(nn.Module):
         Args:
             size (torch.size): Size of the tensor to be parametrized
         """
-        super().__init__()
-        self.size = size
+        super().__init__(size)
 
     @staticmethod
     def frame(X: torch.tensor) -> torch.tensor:
-        """ parametrise orthogonal lie algebra from the general linear matrix X
+        """parametrise orthogonal lie algebra from the general linear matrix X
 
         Args:
             X (torch.tensor): (...,n,n)
-        
+
 
         Returns:
             torch.tensor: (...,n,n)
@@ -35,16 +36,18 @@ class so(nn.Module):
 
     def forward(self, X: torch.tensor) -> torch.tensor:
         if len(X.size()) < 2:
-            raise ValueError('weights has dimension < 2')
+            raise ValueError("weights has dimension < 2")
         if X.size(-2) != X.size(-1):
-            raise ValueError('not sqaured matrix')
+            raise ValueError("not sqaured matrix")
         return self.frame(X)
 
-    @ staticmethod
+    @staticmethod
     def in_lie_algebra(X, eps=1e-5):
-        return (X.dim() >= 2
-                and X.size(-2) == X.size(-1)
-                and torch.allclose(X.transpose(-2, -1), -X, atol=eps))
+        return (
+            X.dim() >= 2
+            and X.size(-2) == X.size(-1)
+            and torch.allclose(X.transpose(-2, -1), -X, atol=eps)
+        )
 
 
 def so_uniform_init_(tensor):

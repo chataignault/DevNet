@@ -7,12 +7,15 @@ import numpy as np
 from development.sp import sp
 from development.so import so
 import sys
-sys.argv = ['']
+
+sys.argv = [""]
 del sys
 
 
 class projection(nn.Module):
-    def __init__(self, input_size, hidden_size, channels=1, param=sp, triv=expm, **kwargs):
+    def __init__(
+        self, input_size, hidden_size, channels=1, param=sp, triv=expm, **kwargs
+    ):
         """this class is used to project the path increments to the Lie group path increments, with Lie algbra trainable weights.
         Args:
             input_size (int): input size
@@ -24,11 +27,11 @@ class projection(nn.Module):
         self.__dict__.update(kwargs)
 
         if self.complex:
-            A = torch.empty(input_size, channels, hidden_size,
-                            hidden_size, dtype=torch.cfloat)
+            A = torch.empty(
+                input_size, channels, hidden_size, hidden_size, dtype=torch.cfloat
+            )
         else:
-            A = torch.empty(input_size, channels, hidden_size,
-                            hidden_size)  # (C,m,m)
+            A = torch.empty(input_size, channels, hidden_size, hidden_size)  # (C,m,m)
         super(projection, self).__init__()
         # self.size = hidden_size
         self.param_map = param(hidden_size)
@@ -40,7 +43,7 @@ class projection(nn.Module):
 
     def reset_parameters(self):
         # nn.init.uniform(self.A)
-        if self.param.__name__ in ['orthogonal', 'se']:
+        if self.param.__name__ in ["orthogonal", "se"]:
             so_uniform_init_(self.A)
             self.param_map(self.A)
 
@@ -71,10 +74,18 @@ class projection(nn.Module):
 
 
 class development_layer(nn.Module):
-
-    def __init__(self, input_size: int, hidden_size: int, channels: int = 1, param=sp,
-                 triv=expm, return_sequence: bool = False, complexification: bool = False,
-                 include_inital: bool = False, time_batch=1):
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        channels: int = 1,
+        param=sp,
+        triv=expm,
+        return_sequence: bool = False,
+        complexification: bool = False,
+        include_inital: bool = False,
+        time_batch=1,
+    ):
         """This the main development layer class, which map the input Euclidean path to the matrix Lie group valued
             path.
 
@@ -102,7 +113,13 @@ class development_layer(nn.Module):
         self.hidden_size = hidden_size
         self.return_sequence = return_sequence
         self.projection = projection(
-            input_size, hidden_size, channels=channels, param=param, triv=triv, complex=self.complex)
+            input_size,
+            hidden_size,
+            channels=channels,
+            param=param,
+            triv=triv,
+            complex=self.complex,
+        )
         self.include_inital = include_inital
         self.truncation = time_batch
 
@@ -120,32 +137,33 @@ class development_layer(nn.Module):
 
         N, T, C = input.shape
         if self.include_inital:
-            input = torch.cat(
-                [torch.zeros((N, 1, C)).to(input.device), input], dim=1)
+            input = torch.cat([torch.zeros((N, 1, C)).to(input.device), input], dim=1)
         dX = input[:, 1:] - input[:, :-1]  # N,T-1,input_size
-        time_len = math.ceil(T/self.truncation)
-        out = torch.eye(self.hidden_size, device=input.device, dtype=input.dtype).reshape(
-            1, 1, self.hidden_size, self.hidden_size).repeat(N, self.channels, 1, 1)
+        time_len = math.ceil(T / self.truncation)
+        out = (
+            torch.eye(self.hidden_size, device=input.device, dtype=input.dtype)
+            .reshape(1, 1, self.hidden_size, self.hidden_size)
+            .repeat(N, self.channels, 1, 1)
+        )
         if self.return_sequence:
             out = []
             for i in range(0, T, time_len):
-
-                dX1 = dX[:, i:i+time_len].reshape(-1, dX.shape[-1])
+                dX1 = dX[:, i : i + time_len].reshape(-1, dX.shape[-1])
                 M_dX = self.projection(dX1).reshape(
-                    N, -1, self.channels, self.hidden_size, self.hidden_size)
+                    N, -1, self.channels, self.hidden_size, self.hidden_size
+                )
                 out.append(self.prod(M_dX))
             return torch.cat(out, 1)
         else:
             for i in range(0, T, time_len):
-
-                dX1 = dX[:, i:i+time_len].reshape(-1, dX.shape[-1])
+                dX1 = dX[:, i : i + time_len].reshape(-1, dX.shape[-1])
                 M_dX = self.projection(dX1).reshape(
-                    N, -1, self.channels, self.hidden_size, self.hidden_size)
-                out = torch.einsum('bcij,bcjk->bcik', out,
-                                   self.dyadic_prod(M_dX))
+                    N, -1, self.channels, self.hidden_size, self.hidden_size
+                )
+                out = torch.einsum("bcij,bcjk->bcik", out, self.dyadic_prod(M_dX))
             return out
 
-    @ staticmethod
+    @staticmethod
     def dyadic_prod(X: torch.tensor) -> torch.tensor:
         """compute cumulative product on matrix time series
             with dyadic partition, should have complexity in O(log(T))
@@ -158,27 +176,28 @@ class development_layer(nn.Module):
         """
         N, T, C, m, m = X.shape
         max_level = int(np.ceil(np.log2(T)))
-        I = torch.eye(m, device=X.device, dtype=X.dtype).reshape(
-            1, 1, 1, m, m).repeat(N, 1, C, 1, 1)
+        I = (
+            torch.eye(m, device=X.device, dtype=X.dtype)
+            .reshape(1, 1, 1, m, m)
+            .repeat(N, 1, C, 1, 1)
+        )
         for i in range(max_level):
             if X.shape[1] % 2 == 1:
                 X = torch.cat([X, I], 1)
             X = X.reshape(-1, 2, C, m, m)
-            X = torch.einsum('bcij,bcjk->bcik', X[:, 0], X[:, 1])
+            X = torch.einsum("bcij,bcjk->bcik", X[:, 0], X[:, 1])
             # X = torch.bmm(X[:, 0], X[:, 1])
             X = X.reshape(N, -1, C, m, m)
         return X[:, 0]
 
-    @ staticmethod
+    @staticmethod
     def prod(X):
         M = []
         N, T, C, m, m = X.shape
-        I = torch.eye(m, device=X.device).reshape(
-            1, 1, m, m).repeat(N, C, 1, 1)
+        I = torch.eye(m, device=X.device).reshape(1, 1, m, m).repeat(N, C, 1, 1)
         M_X = I
         M.append(I.view(N, 1, C, m, m))
         for i in range(T):
-            M_X = torch.einsum('bcij,bcjk->bcik', M_X, X[:, i])
-            M.append(
-                M_X.view(N, 1, C, m, m))
+            M_X = torch.einsum("bcij,bcjk->bcik", M_X, X[:, i])
+            M.append(M_X.view(N, 1, C, m, m))
         return torch.cat(M, dim=1)

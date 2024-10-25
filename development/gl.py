@@ -1,21 +1,21 @@
 import torch
 from torch import nn
+from .param import param
 
 
-class gl(nn.Module):
+class gl(param):
     def __init__(self, size):
         """
-        gl(n) lie algebra matrices, parametrized 
+        gl(n) lie algebra matrices, parametrized
         by a general linear matrix with shape (...,...,n,n).
         Args:
             size (torch.size): Size of the tensor to be parametrized
         """
-        super().__init__()
-        self.size = size
+        super().__init__(size)
 
     @staticmethod
     def frame(X: torch.tensor) -> torch.tensor:
-        """ parametrise geleral linear lie algebra from the gneal linear matrix X
+        """parametrise geleral linear lie algebra from the gneal linear matrix X
 
         Args:
             X (torch.tensor): (...,n,n)
@@ -23,14 +23,12 @@ class gl(nn.Module):
         Returns:
             torch.tensor: (...,n,n)
         """
-    
-        return X
 
+        return X
 
     def forward(self, X: torch.tensor) -> torch.tensor:
         if len(X.size()) < 2:
-            raise ValueError('weights has dimension < 2')
+            raise ValueError("weights has dimension < 2")
         if X.size(-2) != X.size(-1):
-            raise ValueError('not squared matrix')
+            raise ValueError("not squared matrix")
         return self.frame(X)
-    
