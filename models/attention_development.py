@@ -1,16 +1,32 @@
-import sys
-import os
 
-sys.path.append(os.path.join(os.getcwd(), ".."))
-
+from pydantic import BaseModel, field_validator, ConfigDict
+from typing import List, Type, Any
+from torch import nn
+from torch import Tensor
+from torch.nn import MultiheadAttention
 from development.nn import development_layer
 from development.param import param
 from development.so import so
 
 
-from torch import nn
-from torch import Tensor
-from torch.nn import MultiheadAttention
+class GroupConfig(BaseModel):
+    group: Any
+    dim: int
+    channels: int
+
+    # @field_validator('group')
+    # def check_group(cls, v):
+    #     if not issubclass(v, param):
+    #         raise ValueError('group must be a param')
+    #     return v
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+class AttentionDevelopmentConfig(BaseModel):
+    n_heads: int
+    groups: List[GroupConfig]
+
 
 class AttentionDevelopment(nn.Module):
 
@@ -23,6 +39,7 @@ class AttentionDevelopment(nn.Module):
                  channels:int,
                  param:param
                  ):
+        super(AttentionDevelopment, self).__init__()
         self.attention = MultiheadAttention(
             embed_dim=embed_dim,
             dropout=dropout,
@@ -35,10 +52,69 @@ class AttentionDevelopment(nn.Module):
             param=param
         )
 
-    def forward(self, x:Tensor) -> Tensor:
-        x = self.attention(x)
-        x = self.development(x)
+    def forward(self, x: Tensor) -> Tensor:
+        # Apply self-attention
+        # MultiheadAttention expects input of shape (seq_len, batch, embed_dim)
+        x = x.transpose(0, 1)  # Change from (batch, seq_len, embed_dim) to (seq_len, batch, embed_dim)
+        
+        # In self-attention, Q, K, and V are all derived from the input x
+        # We don't need to explicitly create Q, K, V as MultiheadAttention does this internally
+        attn_output, _ = self.attention(query=x, key=x, value=x)
+        
+        attn_output = attn_output.transpose(0, 1)  # Change back to (batch, seq_len, embed_dim)
+        
+        # Apply development layer
+        x = self.development(attn_output)
         return x
+
+# have as many groups as heads, with dimension for each
+class MultiheadAttentionDevelopment(nn.Module):
+
+    def __init__(self, 
+                 dropout:float,
+                 input_dim:int,
+                 hidden_dim:int,
+                 multidev_config: AttentionDevelopmentConfig
+                 ):
+        super(MultiheadAttentionDevelopment, self).__init__()
+
+        self.head_dim = hidden_dim // multidev_config.n_heads
+
+        self.q = nn.Linear(input_dim, hidden_dim)
+        self.k = nn.Linear(input_dim, hidden_dim)
+        self.v = nn.Linear(input_dim, hidden_dim)
+
+        self.attention = MultiheadAttention(
+            embed_dim=hidden_dim,
+            dropout=dropout,
+            num_heads=multidev_config.n_heads,
+            batch_first=True,
+        )
+
+        self.development_layers = nn.ModuleList([
+            development_layer(
+                input_size=hidden_dim // multidev_config.n_heads,
+                hidden_size=grp_config.dim,
+                channels=grp_config.channels,
+                param=grp_config.group
+            )
+            for grp_config in multidev_config.groups
+        ])
+
+    def forward(self, x: Tensor) -> List[Tensor]:
+        q = self.q(x)
+        k = self.k(x)
+        v = self.v(x)
+
+        # We don't need to explicitly create Q, K, V as MultiheadAttention does this internally
+        x, _ = self.attention(query=q, key=k, value=v)
+
+        # Apply development layers
+        xs = []
+        for i in range(len(self.development_layers)):
+            xs.append(self.development_layers[i](x[..., i*self.head_dim:(i+1)*self.head_dim]))
+        return xs
+
 
 if __name__ == "__main__":
     # TODO run some tests to instantiate and forward / backward of the model
