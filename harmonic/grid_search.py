@@ -1,8 +1,17 @@
+# TODO before running
+# - check the data path
+# - check that path develooment repo is locally installed
+
+# inf1.6xlarge 24 vCPUs, 48GB RAM
+
+
 import os
 import torch
 from torch import nn, Tensor
 from torch import optim
 from tqdm import tqdm
+import logging
+import pandas as pd
 
 import numpy as np
 from aeon.datasets import load_from_tsfile
@@ -11,8 +20,46 @@ from development.so import so
 from development.gl import gl
 from development.he import he
 
-from models.attention_development import MultiheadAttentionDevelopment, AttentionDevelopmentConfig, GroupConfig
+from models.attention_development import (
+    MultiheadAttentionDevelopment,
+    AttentionDevelopmentConfig,
+    GroupConfig,
+)
 from torch.utils.data import DataLoader
+
+
+def initialise_logger(log_dir, log_file_name, log_level):
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+
+    # Create the full path for the log file
+    log_file_path = os.path.join(log_dir, log_file_name)
+
+    # Create logger
+    logger = logging.getLogger("SO_grid_search")
+    logger.setLevel(log_level)
+    file_formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)-8s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    console_formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)-8s | %(message)s", datefmt="%H:%M:%S"
+    )
+
+    # Create file handler
+    file_handler = logging.FileHandler(log_file_path)
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(file_formatter)
+
+    # Create console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(log_level)
+    console_handler.setFormatter(console_formatter)
+
+    # Add handlers to logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+    return logger
 
 
 def to_one_hot(y, num_classes=6):
@@ -25,8 +72,9 @@ def to_soft_probabilities(y_one_hot, temperature=0.2):
     return exp_values / np.sum(exp_values, axis=1, keepdims=True)
 
 
-
-def train_model(fm: nn.Module, train_loader: DataLoader, nepochs: int, learning_rate: float):
+def train_model(
+    fm: nn.Module, train_loader: DataLoader, nepochs: int, learning_rate: float
+):
     fm.train()
     optimizer = optim.Adam(fm.parameters(), lr=learning_rate)
     lossx = []
@@ -55,7 +103,7 @@ def train_sample_accuracy(fm: nn.Module, train_loader: DataLoader, y_train: Tens
         n_true_prediction += torch.sum(y_pred == y_true).detach().cpu().numpy()
         preds = np.concatenate([preds, y_pred.detach().cpu().numpy()])
         trues = np.concatenate([trues, y_true.detach().cpu().numpy()])
-    
+
     return n_true_prediction / len(y_train)
 
 
@@ -82,12 +130,15 @@ class PDevBaggingBiLSTM(nn.Module):
         hidden_dim: int,
         out_dim: int,
         multidev_config: AttentionDevelopmentConfig,
+        bidirectional: bool = False,
     ):
         super().__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True)
+        self.lstm = nn.LSTM(
+            input_dim, hidden_dim, batch_first=True, bidirectional=bidirectional
+        )
         self.atdev = MultiheadAttentionDevelopment(
             dropout=dropout,
-            input_dim=hidden_dim,
+            input_dim=(1 + int(bidirectional)) * hidden_dim,
             hidden_dim=hidden_dim,
             multidev_config=multidev_config,
         )
@@ -111,26 +162,25 @@ class PDevBaggingBiLSTM(nn.Module):
         y = self.relu(y)
         y = self.lin2(y)
         return y
-    
+
 
 if __name__ == "__main__":
+    log_dir = "logs"
+    log_file_name = "SO_grid_search.log"
+    log_level = logging.INFO
+    logger = initialise_logger(log_dir, log_file_name, log_level)
 
     n_epochs = 10
-    hidden_size = 10
-    n_heads = 4
-
     learning_rate = 1e-3
+    batch_size = 256
 
     data_dir = os.path.join(os.getcwd(), "..", "data", "WalkingSittingStanding")
     train_file = "WalkingSittingStanding_TRAIN.ts"
     test_file = "WalkingSittingStanding_TEST.ts"
 
-
     tsx_train, y_train_labels = load_from_tsfile(os.path.join(data_dir, train_file))
     tsx_test, y_test_labels = load_from_tsfile(os.path.join(data_dir, test_file))
     # Convert labels to one-hot encoded vectors
-
-    batch_size = 256
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.set_default_device(device)
@@ -145,7 +195,6 @@ if __name__ == "__main__":
     # Convert back to PyTorch tensors
     y_train = torch.logit(torch.tensor(y_train, dtype=torch.float32)).to(device)
     y_test = torch.logit(torch.tensor(y_test, dtype=torch.float32)).to(device)
-
 
     # Create DataLoader for training data
     train_dataset = torch.utils.data.TensorDataset(tsx_train, y_train)
@@ -163,37 +212,70 @@ if __name__ == "__main__":
         generator=torch.Generator(device=device),
     )
 
+    channel_range = range(2, 5)
+    dim_range = range(3, 10)
+    hidden_size_range = [4, 6, 10, 15, 20]
+    heads_range = range(2, 3)
+    lstm_is_bidirectional = [True, False]
 
-    multidev_config = AttentionDevelopmentConfig(
-        n_heads=2,
-        groups=[
-            GroupConfig(group=so, dim=3, channels=3),
-            GroupConfig(group=so, dim=4, channels=3),
-        ],
-    )
+    # nchannels = channel_range[0]
+    # dim = dim_range[0]
+    # n_heads = heads_range[0]
+    # hidden_size = hidden_size_range[0]
+    # bidirectional = lstm_is_bidirectional[0]
 
+    res = pd.DataFrame(
+        columns=["train_acc", "test_acc"],
+        index=pd.MultiIndex.from_product(
+            [
+                channel_range,
+                dim_range,
+                heads_range,
+                hidden_size_range,
+                lstm_is_bidirectional,
+            ],
+            names=["nchannels", "dim", "n_heads", "hidden_size", "bidirectional"],
+        ),
+    ).iloc[:2]
 
-    model = PDevBaggingBiLSTM(
-        dropout=.05,
-        input_dim=3,
-        hidden_dim=4,
-        out_dim=6,
-        multidev_config=multidev_config,
-    ).to(device)
+    for nchannels, dim, n_heads, hidden_size, bidirectional in res.index.to_series():
+        if not hidden_size % n_heads == 0:
+            continue
 
-    model.train()
+        logger.info(
+            f">>> Starting grid search with : nchannels={nchannels}, dim={dim}, hidden_size={hidden_size}, nheads={n_heads}, bidirectional={bidirectional}"
+        )
 
-    model, lossx = train_model(model, train_loader, n_epochs, learning_rate)
+        multidev_config = AttentionDevelopmentConfig(
+            n_heads=n_heads,
+            groups=[
+                GroupConfig(group=so, dim=dim, channels=nchannels)
+                for _ in range(n_heads)
+            ],
+        )
 
-    train_acc = train_sample_accuracy(
-        model, train_loader, y_train
-    )
+        model = PDevBaggingBiLSTM(
+            dropout=0.05,
+            input_dim=3,
+            hidden_dim=hidden_size,
+            out_dim=6,
+            multidev_config=multidev_config,
+            bidirectional=bidirectional,
+        ).to(device)
 
-    test_acc = test_sample_accuracy(
-        model,
-        test_loader,
-        y_test
-    )
+        model.train()
 
-    print(f"Train accuracy: {train_acc} | Test accuracy: {test_acc}")
+        model, lossx = train_model(model, train_loader, n_epochs, learning_rate)
 
+        train_acc = train_sample_accuracy(model, train_loader, y_train)
+
+        test_acc = test_sample_accuracy(model, test_loader, y_test)
+
+        logger.info(f"Train accuracy: {train_acc} | Test accuracy: {test_acc}")
+
+        res.loc[(nchannels, dim, n_heads, hidden_size, bidirectional), :] = [
+            train_acc,
+            test_acc,
+        ]
+
+    res.to_csv(os.path.join(log_dir, "grid_search_results.csv"))
