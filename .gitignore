@@ -1,5 +1,8 @@
 build/
 img/
 data/
+test/
 __pycache__
 *.egg-info
+*.png
+
