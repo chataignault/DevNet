@@ -1,4 +1,3 @@
-
 from pydantic import BaseModel, field_validator, ConfigDict
 from typing import List, Type, Any
 from torch import nn
@@ -20,7 +19,7 @@ class GroupConfig(BaseModel):
     #         raise ValueError('group must be a param')
     #     return v
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    # model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class AttentionDevelopmentConfig(BaseModel):
@@ -29,16 +28,16 @@ class AttentionDevelopmentConfig(BaseModel):
 
 
 class AttentionDevelopment(nn.Module):
-
-    def __init__(self, 
-                 embed_dim:int,
-                 dropout:float,
-                 num_heads:int,
-                 input_size:int,
-                 hidden_size:int,
-                 channels:int,
-                 param:param
-                 ):
+    def __init__(
+        self,
+        embed_dim: int,
+        dropout: float,
+        num_heads: int,
+        input_size: int,
+        hidden_size: int,
+        channels: int,
+        param: param,
+    ):
         super(AttentionDevelopment, self).__init__()
         self.attention = MultiheadAttention(
             embed_dim=embed_dim,
@@ -49,33 +48,38 @@ class AttentionDevelopment(nn.Module):
             input_size=input_size,
             hidden_size=hidden_size,
             channels=channels,
-            param=param
+            param=param,
         )
 
     def forward(self, x: Tensor) -> Tensor:
         # Apply self-attention
         # MultiheadAttention expects input of shape (seq_len, batch, embed_dim)
-        x = x.transpose(0, 1)  # Change from (batch, seq_len, embed_dim) to (seq_len, batch, embed_dim)
-        
+        x = x.transpose(
+            0, 1
+        )  # Change from (batch, seq_len, embed_dim) to (seq_len, batch, embed_dim)
+
         # In self-attention, Q, K, and V are all derived from the input x
         # We don't need to explicitly create Q, K, V as MultiheadAttention does this internally
         attn_output, _ = self.attention(query=x, key=x, value=x)
-        
-        attn_output = attn_output.transpose(0, 1)  # Change back to (batch, seq_len, embed_dim)
-        
+
+        attn_output = attn_output.transpose(
+            0, 1
+        )  # Change back to (batch, seq_len, embed_dim)
+
         # Apply development layer
         x = self.development(attn_output)
         return x
 
+
 # have as many groups as heads, with dimension for each
 class MultiheadAttentionDevelopment(nn.Module):
-
-    def __init__(self, 
-                 dropout:float,
-                 input_dim:int,
-                 hidden_dim:int,
-                 multidev_config: AttentionDevelopmentConfig
-                 ):
+    def __init__(
+        self,
+        dropout: float,
+        input_dim: int,
+        hidden_dim: int,
+        multidev_config: AttentionDevelopmentConfig,
+    ):
         super(MultiheadAttentionDevelopment, self).__init__()
 
         self.head_dim = hidden_dim // multidev_config.n_heads
@@ -91,15 +95,17 @@ class MultiheadAttentionDevelopment(nn.Module):
             batch_first=True,
         )
 
-        self.development_layers = nn.ModuleList([
-            development_layer(
-                input_size=hidden_dim // multidev_config.n_heads,
-                hidden_size=grp_config.dim,
-                channels=grp_config.channels,
-                param=grp_config.group
-            )
-            for grp_config in multidev_config.groups
-        ])
+        self.development_layers = nn.ModuleList(
+            [
+                development_layer(
+                    input_size=hidden_dim // multidev_config.n_heads,
+                    hidden_size=grp_config.dim,
+                    channels=grp_config.channels,
+                    param=grp_config.group,
+                )
+                for grp_config in multidev_config.groups
+            ]
+        )
 
     def forward(self, x: Tensor) -> List[Tensor]:
         q = self.q(x)
@@ -112,14 +118,18 @@ class MultiheadAttentionDevelopment(nn.Module):
         # Apply development layers
         xs = []
         for i in range(len(self.development_layers)):
-            xs.append(self.development_layers[i](x[..., i*self.head_dim:(i+1)*self.head_dim]))
+            xs.append(
+                self.development_layers[i](
+                    x[..., i * self.head_dim : (i + 1) * self.head_dim]
+                )
+            )
         return xs
 
 
 if __name__ == "__main__":
     # TODO run some tests to instantiate and forward / backward of the model
     model = AttentionDevelopment(
-        dropout=.1,
+        dropout=0.1,
         embed_dim=4,
         num_heads=2,
         input_size=3,
