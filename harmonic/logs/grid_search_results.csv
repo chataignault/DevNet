@@ -1,3 +1,0 @@
-nchannels,dim,n_heads,hidden_size,bidirectional,train_acc,test_acc
-2,3,2,4,True,0.37431991294885747,0.3505259586019681
-2,3,2,4,False,0.3601741022850925,0.333220223956566

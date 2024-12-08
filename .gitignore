@@ -7,7 +7,7 @@ __pycache__
 *.png
 *.log
 *.csv
-harmonic/logs
-harmonic/data
-harmonic/notebooks
+harmonic/logs/
+harmonic/data/
+harmonic/notebooks/
 
