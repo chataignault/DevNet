@@ -28,7 +28,7 @@ class he(nn.Module):
             torch.tensor: (...,n,n)
         """
 
-        X = X.tril(-1)
+        X = X.triu(1)
 
         return X
 
