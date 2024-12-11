@@ -8,7 +8,7 @@ dataset: BM_2Sphere
 
 drop_rate : 0
 # cuda, cpu
-device: cuda
+device: cpu
 gpu_id: "0"
 
 seed: 0

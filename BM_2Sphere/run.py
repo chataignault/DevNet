@@ -103,7 +103,8 @@ def _train_BM_2Sphere(
 
                     # Clean CUDA Memory
                     del inputs, outputs, labels
-                    torch.cuda.empty_cache()
+                    if device == "cuda":
+                        torch.cuda.empty_cache()
                     # Perform test and log results
 
                     test_loss = _test_BM_2Sphere(model, test_loader, config)
@@ -172,9 +173,9 @@ def main(config):
     if (config.device ==
             "cuda" and torch.cuda.is_available()):
         config.update({"device": "cuda:0"}, allow_val_change=True)
+        torch.cuda.set_per_process_memory_fraction(0.5, 0)
     else:
         config.update({"device": "cpu"}, allow_val_change=True)
-    torch.cuda.set_per_process_memory_fraction(0.5, 0)
     from BM_2Sphere.models import get_model
     model = get_model(config)
     from BM_2Sphere.dataloader import get_dataset
