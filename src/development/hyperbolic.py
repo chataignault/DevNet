@@ -1,18 +1,18 @@
 import torch
 from torch import nn
+from .param import param
 
 
-class hyperbolic(nn.Module):
+class hyperbolic(param):
     def __init__(self, size):
         """
         lie algebra matrices preserving orientation of the hyperbolic symmetris,
-        parametrized in terms of 
+        parametrized in terms of
         by a general linear matrix with shape (...,...,n,n).
         Args:
             size (torch.size): Size of the tensor to be parametrized
         """
-        super().__init__()
-        self.size = size
+        super().__init__(size)
 
     @staticmethod
     def frame(X: torch.tensor) -> torch.tensor:
@@ -32,8 +32,7 @@ class hyperbolic(nn.Module):
 
         return A
 
-
     def forward(self, X: torch.tensor) -> torch.tensor:
         if len(X.size()) < 2:
-            raise ValueError('weights has dimension < 2')
+            raise ValueError("weights has dimension < 2")
         return self.frame(X)
