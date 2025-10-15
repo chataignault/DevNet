@@ -1,9 +1,11 @@
 """
 Adapted from https://github.com/Lezcano/expRNN/blob/master/expm32.py
 """
+
 import torch
 import math
 from development.so import so
+
 degs = [1, 2, 4, 8, 12, 18]
 
 thetas_dict = {
@@ -128,16 +130,14 @@ def matrix_power_two_batch(A, k):
     processed = count[nonzero[0]]
     for exp in nonzero[1:]:
         new, last = exp - last, exp
-        A[idx[processed:]] = torch.matrix_power(
-            A[idx[processed:]], 2 ** new.item())
+        A[idx[processed:]] = torch.matrix_power(A[idx[processed:]], 2 ** new.item())
         processed += count[exp]
     return A.reshape(orig_size)
 
 
 def expm_taylor(A):
     if A.ndimension() < 2 or A.size(-2) != A.size(-1):
-        raise ValueError(
-            "Expected a square matrix or a batch of square matrices")
+        raise ValueError("Expected a square matrix or a batch of square matrices")
 
     if A.ndimension() == 2:
         # Just one matrix
@@ -161,9 +161,9 @@ def expm_taylor(A):
 
         # Scale square
         s = int(math.ceil(math.log2(normA) - math.log2(thetas[-1])))
-        A = A * (2 ** -s)
+        A = A * (2**-s)
         X = taylor_approx(A, degs[-1])
-        return torch.matrix_power(X, 2 ** s)
+        return torch.matrix_power(X, 2**s)
     else:
         # Batching
 
@@ -180,19 +180,16 @@ def expm_taylor(A):
 
         # Handle trivial case
         if (normA == 0.0).all():
-            Id = torch.eye(A.size(-2), A.size(-1),
-                           dtype=A.dtype, device=A.device)
+            Id = torch.eye(A.size(-2), A.size(-1), dtype=A.dtype, device=A.device)
             return Id.expand_as(A)
 
         # Handle small normA
         more = normA > thetas[-1]
         s = normA.new_zeros(normA.size(), dtype=torch.long)
-        s[more] = torch.ceil(torch.log2(normA[more]) -
-                             math.log2(thetas[-1])).long()
+        s[more] = torch.ceil(torch.log2(normA[more]) - math.log2(thetas[-1])).long()
 
         # A = A * 2**(-s)
-        A = torch.pow(
-            0.5, s.float()).unsqueeze_(-1).unsqueeze_(-1).expand_as(A) * A
+        A = torch.pow(0.5, s.float()).unsqueeze_(-1).unsqueeze_(-1).expand_as(A) * A
         X = taylor_approx(A, degs[-1])
         return matrix_power_two_batch(X, s)
 
@@ -220,7 +217,7 @@ def taylor8(Id, A, A2):
     c1 = (11.0 * (-1.0 + SQRT)) / (1260.0 * x3)
     c2 = (11.0 * (-9.0 + SQRT)) / (5040.0 * x3)
     c4 = (89.0 - SQRT) / (5040.0 * x3 * x3)
-    y2 = ((857.0 - 58.0 * SQRT)) / 630.0
+    y2 = (857.0 - 58.0 * SQRT) / 630.0
     # Matrix products
     A4 = A2 @ (x1 * A + x2 * A2)
     A8 = (x3 * A2 + A4) @ (c0 * Id + c1 * A + c2 * A2 + c4 * A4)
@@ -330,7 +327,7 @@ class expm_taylor_class(torch.autograd.Function):
             return G
         else:
             diff = differential(A.transpose(-2, -1), G, expm_taylor)
-            #print('diff test:', so(A.shape[-1]).in_lie_algebra(diff))
+            # print('diff test:', so(A.shape[-1]).in_lie_algebra(diff))
             return diff
 
 
@@ -339,14 +336,12 @@ def expm(X):
 
 
 def rescaled_matrix_exp(f, A):
-
     normA = torch.max(torch.sum(torch.abs(A), axis=-2), axis=-1).values
     more = normA > 1
     s = torch.ceil(torch.log2(normA)).long()
     s = normA.new_zeros(normA.size(), dtype=torch.long)
     s[more] = torch.ceil(torch.log2(normA[more])).long()
-    A_1 = torch.pow(
-        0.5, s.float()).unsqueeze_(-1).unsqueeze_(-1).expand_as(A) * A
+    A_1 = torch.pow(0.5, s.float()).unsqueeze_(-1).unsqueeze_(-1).expand_as(A) * A
     return matrix_power_two_batch(f(A_1), s)
 
 

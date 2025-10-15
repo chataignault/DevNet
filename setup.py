@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="Path_Development_Net",
+    name="path_development_net",
     version="0.0.2",
     author="PDevNet",
     description="Path Development Network with Finite dimensional Lie Group",
